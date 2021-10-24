@@ -1,0 +1,11 @@
+name: opensong_find_similar
+description: A sample command-line application.
+# version: 1.0.0
+# homepage: https://www.example.com
+
+environment:
+  sdk: '>=2.8.1 <3.0.0'
+
+dependencies:
+  path: ^1.7.0
+  string_similarity: ^1.1.0
