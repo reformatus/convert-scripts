@@ -2,12 +2,16 @@ import 'dart:io';
 import 'package:html/parser.dart' as html;
 import 'package:intl/intl.dart';
 import 'package:xml/xml.dart';
+import 'package:path/path.dart';
+import 'dart:convert';
 
 File lyricsFile = File('ujrek_text.txt');
+List<String> letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K'];
 
 void main() {
   List<String> sourceLines = [];
   List<ProtoSong> protoSongs = [];
+  List<Sheet> sheets = [];
 
   print('Reading file...');
   sourceLines = lyricsFile.readAsLinesSync();
@@ -47,16 +51,44 @@ void main() {
 
   print('Parsed ${protoSongs.length} songs.');
 
+  print('Parsing sheets...');
+
+  for (File sheetFile in Directory("sheets").listSync().whereType<File>()) {
+    String basename = basenameWithoutExtension(sheetFile.path);
+    sheets.add(Sheet(
+        sheetFile,
+        int.parse(basename.substring(1, basename.indexOf("-"))),
+        int.parse(basename.substring(basename.indexOf('-') + 1))));
+  }
+
   print('Building songs...');
+
   for (ProtoSong song in protoSongs) {
     print(song.filename);
 
     String lyrics = "";
+    String presentationOrder = "";
+
+    List<Sheet> songSheets =
+        sheets.where((element) => element.songID == song.index).toList();
+
+    for (Sheet sheet in songSheets) {
+      lyrics +=
+          "[V1${letters[songSheets.indexOf(sheet)]}]\n ${sheet.songID}-${sheet.sheetID}\n";
+      presentationOrder += "V1${letters[songSheets.indexOf(sheet)]} ";
+    }
 
     for (String verseString in song.verses) {
       lyrics += ('[V${song.verses.indexOf(verseString) + 1}]\n$verseString' +
           (verseString.substring(verseString.length - 1) == "\n" ? "" : "\n"));
+      if (song.verses.indexOf(verseString) != 0) {
+        presentationOrder += "V${song.verses.indexOf(verseString) + 1} ";
+      }
     }
+
+    presentationOrder = presentationOrder.trim();
+
+    //! Build XML
 
     var builder = XmlBuilder();
     builder.processing('xml', 'version="1.0"');
@@ -64,8 +96,27 @@ void main() {
       builder.element('title', nest: () {
         builder.text(song.presentTitle);
       });
+      builder.element('presentation', nest: () {
+        builder.text(presentationOrder);
+      });
       builder.element('lyrics', nest: () {
         builder.text(lyrics);
+      });
+      builder.element('backgrounds', nest: () {
+        builder.attribute('resize', 'body');
+        builder.attribute('keep_aspect', 'true');
+        builder.attribute('link', 'false');
+        builder.attribute('background_as_text', 'true');
+
+        for (Sheet sheet in songSheets) {
+          builder.element('background', nest: () {
+            builder.attribute(
+                'verse', "V1${letters[songSheets.indexOf(sheet)]}");
+            builder.element('image', nest: () {
+              builder.text(base64Encode(sheet.file.readAsBytesSync()));
+            });
+          });
+        }
       });
     });
 
@@ -85,4 +136,11 @@ class ProtoSong {
   List<String> verses;
 
   ProtoSong(this.index, this.presentTitle, this.filename, this.verses);
+}
+
+class Sheet {
+  File file;
+  int songID;
+  int sheetID;
+  Sheet(this.file, this.songID, this.sheetID);
 }
