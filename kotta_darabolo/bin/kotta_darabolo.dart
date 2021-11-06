@@ -12,7 +12,7 @@ List<int> noLinesErrorSongs = [];
 List<int> notEvenLinesErrorSongs = [];
 
 void main(List<String> arguments) async {
-  await for (var sheetEntity in sheetsDir.list()) {
+  for (var sheetEntity in sheetsDir.listSync().sublist(0)) {
     var sheetFile = sheetEntity as File;
     print(basenameWithoutExtension(sheetFile.path));
 
@@ -22,17 +22,21 @@ void main(List<String> arguments) async {
     Image image = decodeJpg(sheetFile.readAsBytesSync());
 
     List<int> newSheetLineRows = getNewSheetLineRows(getContentRows(image));
-/*
+
+    //image =
+    //    markRows(image, getContentRows(image, reversed: true), [150, 150, 150]);
+
+    image = markRows(image, newSheetLineRows, [255, 0, 0]);
+
     File markedPicture = File("marked\\M$songID.jpg");
-    markedPicture.create(recursive: true).then((_) {
-      markedPicture.writeAsBytes(encodeJpg(markRows(image, newSheetLineRows)));
-    });
-*/
-    errorCheck(songID, image.height, newSheetLineRows);
+    markedPicture.createSync(recursive: true);
+    markedPicture.writeAsBytesSync(encodeJpg(image));
+
+    //errorCheck(songID, image.height, newSheetLineRows);
     //break;
   }
 
-  File reportFile = File("report.txt");
+  File reportFile = File("report.log");
   reportFile.createSync(recursive: true);
   List<String> reportLines = [];
 
@@ -66,6 +70,8 @@ void main(List<String> arguments) async {
   print("Report saved.");
 }
 
+
+
 errorCheck(int songID, int sheetHeight, List<int> sheetLineRows) {
   if (sheetLineRows.isEmpty) {
     noLinesErrorSongs.add(songID);
@@ -76,10 +82,10 @@ errorCheck(int songID, int sheetHeight, List<int> sheetLineRows) {
   int expectedLines = (sheetHeight / 170).round();
   int difference = sheetLineRows.length - expectedLines;
 
-  if (difference > 1) {
+  if (difference > 2) {
     tooMuchLinesErrorSongs.add(songID);
     print("Too much lines!");
-  } else if (difference < -1) {
+  } else if (difference < -2) {
     notEnoughLinesErrorSongs.add(songID);
     print("Not Enough lines!");
   }
@@ -149,13 +155,15 @@ List<int> getNewSheetLineRows(List<int> contentRows) {
   return newSheetLineRows;
 }
 
-Image markRows(Image original, List<int> rows) {
+Image markRows(Image original, List<int> rows, List<int> replaceWithRGB) {
+  assert(replaceWithRGB.length == 3);
+
   List<int> newPixels = [];
 
   for (var y = 0; y < original.height; y++) {
     for (var x = 0; x < original.width; x++) {
       newPixels.addAll(rows.contains(y)
-          ? [255, 0, 0]
+          ? replaceWithRGB
           : [
               (original.getPixel(x, y) & 0x000000FF),
               (original.getPixel(x, y) & 0x0000FF00) >> 8,
@@ -173,15 +181,15 @@ Image markRows(Image original, List<int> rows) {
   return newImage;
 }
 
-List<int> getContentRows(Image image) {
+List<int> getContentRows(Image image, {bool reversed = false}) {
   List<int> contentRows = [];
-  bool contentRow = true;
+  bool emptyRow = true;
   for (var y = 0; y < image.height; y++) {
-    contentRow = true;
-    for (var x = 0; x < image.width; x++) {
-      if (image.getPixel(x, y) < darkCutoff) contentRow = false;
+    emptyRow = true;
+    for (var x = 0; x < 34; x++) {
+      if (image.getPixel(x, y) < darkCutoff) emptyRow = false;
     }
-    if (!contentRow) contentRows.add(y);
+    if (!(emptyRow ^ reversed)) contentRows.add(y);
   }
 
   //contentRows.forEach(print);
