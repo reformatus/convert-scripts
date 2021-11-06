@@ -26,16 +26,142 @@ void main(List<String> arguments) async {
     //image =
     //    markRows(image, getContentRows(image, reversed: true), [150, 150, 150]);
 
-    image = markRows(image, newSheetLineRows, [255, 0, 0]);
+    //image = markRows(image, newSheetLineRows, [255, 0, 0]);
 
+    int i = 1;
+
+    for (Image part in getParts(image, newSheetLineRows)) {
+      File partFile = File("parts_blue\\P$songID-$i.jpg");
+      partFile.createSync(recursive: true);
+      partFile.writeAsBytesSync(encodeJpg(processImage(part)));
+      i++;
+    }
+
+/*
+    for (Image part in getParts(image, newSheetLineRows)) {
+      File partFile = File("parts_white\\P$songID-$i.jpg");
+      partFile.createSync(recursive: true);
+      partFile.writeAsBytesSync(encodeJpg(part));
+      i++;
+    }
+*/
+/*
     File markedPicture = File("marked\\M$songID.jpg");
     markedPicture.createSync(recursive: true);
     markedPicture.writeAsBytesSync(encodeJpg(image));
-
+*/
     //errorCheck(songID, image.height, newSheetLineRows);
     //break;
   }
 
+  //saveReport();
+}
+
+Image processImage(Image original) {
+  List<int> originalBytes = original.getBytes();
+  List<int> processedBytes = [];
+
+  for (var i = 0; i < original.width * original.height * 4; i += 4) {
+    int brightness =
+        ((originalBytes[i] + originalBytes[i + 1] + originalBytes[i + 2]) / 3)
+            .round()
+            .clamp(0, 255);
+    if (brightness > 200) brightness = 255;
+    if (brightness < 20) brightness = 0;
+    brightness = 255 - brightness;
+    processedBytes.addAll([
+      (37 + brightness).clamp(0, 255),
+      (55 + brightness).clamp(0, 255),
+      (69 + brightness).clamp(0, 255),
+      255
+    ]);
+  }
+
+  return Image.fromBytes(original.width, original.height, processedBytes);
+}
+
+List<Image> getParts(Image original, List<int> sheetLineRows) {
+  List<Image> parts = [];
+  List<List<int>> lineRanges = [];
+  List<List<int>> partsLineRanges = [];
+
+  //int prevBeginRow = 0;
+  for (int beginRow in sheetLineRows) {
+    //print("Adding range from $beginRow");
+    int length = ((sheetLineRows.indexOf(beginRow) == sheetLineRows.length - 1)
+            ? original.height
+            : (sheetLineRows[(sheetLineRows.indexOf(beginRow) + 1)])) -
+        beginRow;
+    //print(length);
+    //List<int> _tempLineRange = [];
+    /*
+    for (int row = beginRow - 8; row < length + beginRow - 4; row++) {
+      _tempLineRange.add(row);
+    }
+*/
+    lineRanges.add(List<int>.generate(length, (index) => beginRow + index - 4));
+  }
+/*
+  ? Not needed in the end
+  int prevRow = sheetLineRows.first;
+  int sum = 0;
+  for (var row in sheetLineRows) {
+    sum += row - prevRow;
+    prevRow = row;
+  }
+
+  double avgHeight = sum / sheetLineRows.length - 1;
+*/
+  List<int> _tempRowsInPart = [];
+
+  addLines(int amount) {
+    //print("  Adding lines...");
+    for (var i = 0; i < amount; i++) {
+      //print("  Added 1 line ${lineRanges.first.first}");
+      _tempRowsInPart.addAll(lineRanges.first);
+      lineRanges.removeAt(0);
+    }
+    partsLineRanges.add(_tempRowsInPart);
+    _tempRowsInPart = [];
+  }
+
+  while (lineRanges.isNotEmpty) {
+    switch (lineRanges.length) {
+      case 4:
+        //print("Splitting last 4 lines.");
+        addLines(2);
+        addLines(2);
+        break;
+      case 2:
+        //print("Adding last two lines.");
+        addLines(2);
+        break;
+      default:
+        //print("Adding 3 lines.");
+        addLines(3);
+        break;
+    }
+  }
+
+  for (List<int> lineRange in partsLineRanges) {
+    try {
+      parts.add(Image.fromBytes(
+          original.width,
+          lineRange.length,
+          original.getBytes(format: Format.rgb).sublist(
+              lineRange.first * original.width * 3,
+              lineRange.last * original.width * 3 + original.width * 3),
+          format: Format.rgb));
+    } catch (e) {
+      print("Error when adding part for song!\n$e");
+      parts.add(original);
+    }
+  }
+
+  return parts;
+}
+
+saveReport() {
   File reportFile = File("report.log");
   reportFile.createSync(recursive: true);
   List<String> reportLines = [];
@@ -69,8 +195,6 @@ void main(List<String> arguments) async {
 
   print("Report saved.");
 }
-
-
 
 errorCheck(int songID, int sheetHeight, List<int> sheetLineRows) {
   if (sheetLineRows.isEmpty) {
