@@ -7,12 +7,12 @@ Directory sheetsDir = Directory("sheets");
 const int darkCutoff = 4289506990;
 
 List<int> notEnoughLinesErrorSongs = [];
-List<int> tooMuchLinesErrorSongs = [];
+List<int> tooManyLinesErrorSongs = [];
 List<int> noLinesErrorSongs = [];
 List<int> notEvenLinesErrorSongs = [];
 
 void main(List<String> arguments) async {
-  for (var sheetEntity in sheetsDir.listSync().sublist(0)) {
+  for (var sheetEntity in sheetsDir.listSync().sublist(0, 5)) {
     var sheetFile = sheetEntity as File;
     print(basenameWithoutExtension(sheetFile.path));
 
@@ -31,9 +31,20 @@ void main(List<String> arguments) async {
     int i = 1;
 
     for (Image part in getParts(image, newSheetLineRows)) {
-      File partFile = File("parts_blue\\P$songID-$i.jpg");
+      File partFile = File("parts_white\\P$songID-$i.jpg");
       partFile.createSync(recursive: true);
-      partFile.writeAsBytesSync(encodeJpg(processImage(part)));
+      partFile
+          .writeAsBytesSync(encodeJpg(processImage(part, OutputType.white)));
+
+      partFile = File("parts_transparent\\P$songID-$i.png");
+      partFile.createSync(recursive: true);
+      partFile.writeAsBytesSync(
+          encodePng(processImage(part, OutputType.transparent)));
+
+      partFile = File("parts_blue\\P$songID-$i.jpg");
+      partFile.createSync(recursive: true);
+      partFile.writeAsBytesSync(encodeJpg(processImage(part, OutputType.blue)));
+
       i++;
     }
 
@@ -54,30 +65,40 @@ void main(List<String> arguments) async {
     //break;
   }
 
-  //saveReport();
+  saveReport();
 }
 
-Image processImage(Image original) {
-  List<int> originalBytes = original.getBytes();
-  List<int> processedBytes = [];
+enum OutputType { white, transparent, blue }
 
-  for (var i = 0; i < original.width * original.height * 4; i += 4) {
-    int brightness =
-        ((originalBytes[i] + originalBytes[i + 1] + originalBytes[i + 2]) / 3)
-            .round()
-            .clamp(0, 255);
-    if (brightness > 200) brightness = 255;
-    if (brightness < 20) brightness = 0;
-    brightness = 255 - brightness;
-    processedBytes.addAll([
-      (37 + brightness).clamp(0, 255),
-      (55 + brightness).clamp(0, 255),
-      (69 + brightness).clamp(0, 255),
-      255
-    ]);
+Image processImage(Image original, OutputType outputType) {
+  if (outputType == OutputType.white) {
+    return original;
+  } else {
+    List<int> originalBytes = original.getBytes();
+    List<int> processedBytes = [];
+
+    for (var i = 0; i < original.width * original.height * 4; i += 4) {
+      int brightness =
+          ((originalBytes[i] + originalBytes[i + 1] + originalBytes[i + 2]) / 3)
+              .round()
+              .clamp(0, 255);
+      if (brightness > 200) brightness = 255;
+      if (brightness < 20) brightness = 0;
+      brightness = 255 - brightness; //invert
+
+      if (outputType == OutputType.blue) {
+        processedBytes.addAll([
+          (37 + brightness).clamp(0, 255), //red
+          (55 + brightness).clamp(0, 255), //green
+          (69 + brightness).clamp(0, 255), //blue
+          255
+        ]);
+      } else if (outputType == OutputType.transparent) {
+        processedBytes.addAll([255, 255, 255, brightness]);
+      }
+    }
+    return Image.fromBytes(original.width, original.height, processedBytes);
   }
-
-  return Image.fromBytes(original.width, original.height, processedBytes);
 }
 
 List<Image> getParts(Image original, List<int> sheetLineRows) {
@@ -169,7 +190,7 @@ saveReport() {
   notEvenLinesErrorSongs.sort();
   noLinesErrorSongs.sort();
   notEnoughLinesErrorSongs.sort();
-  tooMuchLinesErrorSongs.sort();
+  tooManyLinesErrorSongs.sort();
 
   reportLines.add("Not enough lines in:");
   notEnoughLinesErrorSongs.forEach((element) {
@@ -186,8 +207,8 @@ saveReport() {
   noLinesErrorSongs.forEach((element) {
     reportLines.add(element.toString());
   });
-  reportLines.add("\nToo much lines in:");
-  tooMuchLinesErrorSongs.forEach((element) {
+  reportLines.add("\nToo many lines in:");
+  tooManyLinesErrorSongs.forEach((element) {
     reportLines.add(element.toString());
   });
 
@@ -207,7 +228,7 @@ errorCheck(int songID, int sheetHeight, List<int> sheetLineRows) {
   int difference = sheetLineRows.length - expectedLines;
 
   if (difference > 2) {
-    tooMuchLinesErrorSongs.add(songID);
+    tooManyLinesErrorSongs.add(songID);
     print("Too much lines!");
   } else if (difference < -2) {
     notEnoughLinesErrorSongs.add(songID);
