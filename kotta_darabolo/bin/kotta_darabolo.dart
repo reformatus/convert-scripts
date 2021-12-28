@@ -4,6 +4,7 @@ import 'package:path/path.dart';
 
 Directory sheetsDir = Directory("sheets");
 
+const double maxAspectRatio = 16 / 11; //~1.45
 const int darkCutoff = 4289506990;
 
 List<int> notEnoughLinesErrorSongs = [];
@@ -19,7 +20,7 @@ void main(List<String> arguments) async {
     int songID =
         int.parse(basenameWithoutExtension(sheetFile.path).substring(1));
 
-    Image image = decodeJpg(sheetFile.readAsBytesSync());
+    Image image = trimSheet(decodeJpg(sheetFile.readAsBytesSync()));
 
     List<int> newSheetLineRows = getNewSheetLineRows(getContentRows(image));
 
@@ -34,7 +35,7 @@ void main(List<String> arguments) async {
       File partFile = File("parts_white\\P$songID-$i.jpg");
       partFile.createSync(recursive: true);
       partFile
-          .writeAsBytesSync(encodeJpg(processImage(part, OutputType.white)));
+          .writeAsBytesSync(encodeJpg(processImage(part, OutputType.white), quality: 90));
 
       partFile = File("parts_transparent\\P$songID-$i.png");
       partFile.createSync(recursive: true);
@@ -43,7 +44,7 @@ void main(List<String> arguments) async {
 
       partFile = File("parts_blue\\P$songID-$i.jpg");
       partFile.createSync(recursive: true);
-      partFile.writeAsBytesSync(encodeJpg(processImage(part, OutputType.blue)));
+      partFile.writeAsBytesSync(encodeJpg(processImage(part, OutputType.blue), quality: 90));
 
       i++;
     }
@@ -66,6 +67,22 @@ void main(List<String> arguments) async {
   }
 
   saveReport();
+}
+
+Image trimSheet(Image original) {
+  var contentRows = getContentRows(original, fullWidth: true);
+  int startRow = contentRows.first - 3;
+  if (startRow < 0) startRow = 0;
+  int endRow = contentRows.last + 5;
+  if (endRow >= original.height) endRow = original.height - 1;
+
+  return Image.fromBytes(
+      original.width,
+      endRow - startRow,
+      original.getBytes(format: Format.rgb).sublist(
+          startRow * original.width * 3,
+          endRow * original.width * 3),
+      format: Format.rgb);
 }
 
 enum OutputType { white, transparent, blue }
@@ -326,12 +343,12 @@ Image markRows(Image original, List<int> rows, List<int> replaceWithRGB) {
   return newImage;
 }
 
-List<int> getContentRows(Image image, {bool reversed = false}) {
+List<int> getContentRows(Image image, {bool reversed = false, bool fullWidth = false}) {
   List<int> contentRows = [];
   bool emptyRow = true;
   for (var y = 0; y < image.height; y++) {
     emptyRow = true;
-    for (var x = 0; x < 34; x++) {
+    for (var x = 0; x < (fullWidth ? image.width : 34); x++) {
       if (image.getPixel(x, y) < darkCutoff) emptyRow = false;
     }
     if (!(emptyRow ^ reversed)) contentRows.add(y);
