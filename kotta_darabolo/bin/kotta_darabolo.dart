@@ -4,7 +4,7 @@ import 'package:path/path.dart';
 
 Directory sheetsDir = Directory("sheets");
 
-const double maxAspectRatio = 16 / 11; //~1.45
+const double minAspectRatio = 16 / 9; //~1.45
 const int darkCutoff = 4289506990;
 
 List<int> notEnoughLinesErrorSongs = [];
@@ -34,17 +34,18 @@ void main(List<String> arguments) async {
     for (Image part in getParts(image, newSheetLineRows)) {
       File partFile = File("parts_white\\P$songID-$i.jpg");
       partFile.createSync(recursive: true);
-      partFile
-          .writeAsBytesSync(encodeJpg(processImage(part, OutputType.white), quality: 90));
+      partFile.writeAsBytesSync(
+          encodeJpg(processSheet(part, OutputType.white), quality: 90));
 
       partFile = File("parts_transparent\\P$songID-$i.png");
       partFile.createSync(recursive: true);
       partFile.writeAsBytesSync(
-          encodePng(processImage(part, OutputType.transparent)));
+          encodePng(processSheet(part, OutputType.transparent)));
 
       partFile = File("parts_blue\\P$songID-$i.jpg");
       partFile.createSync(recursive: true);
-      partFile.writeAsBytesSync(encodeJpg(processImage(part, OutputType.blue), quality: 90));
+      partFile.writeAsBytesSync(
+          encodeJpg(processSheet(part, OutputType.blue), quality: 90));
 
       i++;
     }
@@ -79,43 +80,43 @@ Image trimSheet(Image original) {
   return Image.fromBytes(
       original.width,
       endRow - startRow,
-      original.getBytes(format: Format.rgb).sublist(
-          startRow * original.width * 3,
-          endRow * original.width * 3),
+      original
+          .getBytes(format: Format.rgb)
+          .sublist(startRow * original.width * 3, endRow * original.width * 3),
       format: Format.rgb);
 }
 
 enum OutputType { white, transparent, blue }
 
-Image processImage(Image original, OutputType outputType) {
+Image processSheet(Image original, OutputType outputType) {
   if (outputType == OutputType.white) {
     return original;
-  } else {
-    List<int> originalBytes = original.getBytes();
-    List<int> processedBytes = [];
-
-    for (var i = 0; i < original.width * original.height * 4; i += 4) {
-      int brightness =
-          ((originalBytes[i] + originalBytes[i + 1] + originalBytes[i + 2]) / 3)
-              .round()
-              .clamp(0, 255);
-      if (brightness > 200) brightness = 255;
-      if (brightness < 20) brightness = 0;
-      brightness = 255 - brightness; //invert
-
-      if (outputType == OutputType.blue) {
-        processedBytes.addAll([
-          (37 + brightness).clamp(0, 255), //red
-          (55 + brightness).clamp(0, 255), //green
-          (69 + brightness).clamp(0, 255), //blue
-          255
-        ]);
-      } else if (outputType == OutputType.transparent) {
-        processedBytes.addAll([255, 255, 255, brightness]);
-      }
-    }
-    return Image.fromBytes(original.width, original.height, processedBytes);
   }
+
+  List<int> originalBytes = original.getBytes();
+  List<int> processedBytes = [];
+
+  for (var i = 0; i < original.width * original.height * 4; i += 4) {
+    int brightness =
+        ((originalBytes[i] + originalBytes[i + 1] + originalBytes[i + 2]) / 3)
+            .round()
+            .clamp(0, 255);
+    if (brightness > 200) brightness = 255;
+    if (brightness < 20) brightness = 0;
+    brightness = 255 - brightness; //invert
+
+    if (outputType == OutputType.blue) {
+      processedBytes.addAll([
+        (37 + brightness).clamp(0, 255), //red
+        (55 + brightness).clamp(0, 255), //green
+        (69 + brightness).clamp(0, 255), //blue
+        255
+      ]);
+    } else if (outputType == OutputType.transparent) {
+      processedBytes.addAll([255, 255, 255, brightness]);
+    }
+  }
+  return Image.fromBytes(original.width, original.height, processedBytes);
 }
 
 List<Image> getParts(Image original, List<int> sheetLineRows) {
@@ -123,33 +124,15 @@ List<Image> getParts(Image original, List<int> sheetLineRows) {
   List<List<int>> lineRanges = [];
   List<List<int>> partsLineRanges = [];
 
-  //int prevBeginRow = 0;
   for (int beginRow in sheetLineRows) {
-    //print("Adding range from $beginRow");
     int length = ((sheetLineRows.indexOf(beginRow) == sheetLineRows.length - 1)
             ? original.height
             : (sheetLineRows[(sheetLineRows.indexOf(beginRow) + 1)])) -
         beginRow;
-    //print(length);
-    //List<int> _tempLineRange = [];
-    /*
-    for (int row = beginRow - 8; row < length + beginRow - 4; row++) {
-      _tempLineRange.add(row);
-    }
-*/
+
     lineRanges.add(List<int>.generate(length, (index) => beginRow + index - 4));
   }
-/*
-  ? Not needed in the end
-  int prevRow = sheetLineRows.first;
-  int sum = 0;
-  for (var row in sheetLineRows) {
-    sum += row - prevRow;
-    prevRow = row;
-  }
 
-  double avgHeight = sum / sheetLineRows.length - 1;
-*/
   List<int> _tempRowsInPart = [];
 
   addLines(int amount) {
@@ -163,7 +146,23 @@ List<Image> getParts(Image original, List<int> sheetLineRows) {
     _tempRowsInPart = [];
   }
 
+  //! Add first line
+  _tempRowsInPart.addAll(lineRanges.first);
+  lineRanges.removeAt(0);
+
   while (lineRanges.isNotEmpty) {
+    //! If adding the next line will fit in aspect ratio target
+    while (original.width / (_tempRowsInPart.length + lineRanges.first.length) >
+        minAspectRatio) {
+      _tempRowsInPart.addAll(lineRanges.first);
+      lineRanges.removeAt(0);
+
+      if (lineRanges.isEmpty) break;
+    }
+
+    partsLineRanges.add(_tempRowsInPart);
+    _tempRowsInPart = [];
+    /*
     switch (lineRanges.length) {
       case 4:
         //print("Splitting last 4 lines.");
@@ -179,6 +178,8 @@ List<Image> getParts(Image original, List<int> sheetLineRows) {
         addLines(3);
         break;
     }
+  }*/
+
   }
 
   for (List<int> lineRange in partsLineRanges) {
@@ -343,7 +344,8 @@ Image markRows(Image original, List<int> rows, List<int> replaceWithRGB) {
   return newImage;
 }
 
-List<int> getContentRows(Image image, {bool reversed = false, bool fullWidth = false}) {
+List<int> getContentRows(Image image,
+    {bool reversed = false, bool fullWidth = false}) {
   List<int> contentRows = [];
   bool emptyRow = true;
   for (var y = 0; y < image.height; y++) {
