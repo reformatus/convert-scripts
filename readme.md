@@ -10,6 +10,8 @@
 
 # Kottadarabolási elvek
 
+[Kotta daraboló scriptben található.](https://github.com/reformatus/convert-scripts/tree/main/kotta_darabolo)
+
 ## 1. Sorok száma szerint
 A sorok pixeltartományából ciklussal 3 soronként diára illeszteni.
 
