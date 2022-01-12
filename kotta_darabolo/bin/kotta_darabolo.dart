@@ -16,8 +16,12 @@ List<int> lastPageOneLineSongs = [];
 List<int> hasOneLinePageSongs = [];
 
 void main(List<String> arguments) async {
-  for (var sheetEntity in sheetsDir.listSync().sublist(0, 5)) {
-    var sheetFile = sheetEntity as File;
+  List<File> sheetFiles = sheetsDir.listSync().whereType<File>().toList();
+  sheetFiles.sort((a, b) =>
+      int.parse(basenameWithoutExtension(a.path).substring(1))
+          .compareTo(int.parse(basenameWithoutExtension(b.path).substring(1))));
+
+  for (File sheetFile in sheetFiles.sublist(0, 5)) {
     print(basenameWithoutExtension(sheetFile.path));
 
     int songID =
@@ -25,12 +29,31 @@ void main(List<String> arguments) async {
 
     Image image = trimSheet(decodeJpg(sheetFile.readAsBytesSync()));
 
-    List<SheetLine> newSheetLineRows = getSheetLines(getContentRows(image));
+    List<SheetLine> newSheetLineRows =
+        getSheetLines(getContentRows(image), image.height - 1);
 
     //image =
     //    markRows(image, getContentRows(image, reversed: true), [150, 150, 150]);
 
     //image = markRows(image, newSheetLineRows, [255, 0, 0]);
+
+    //! Mark lines (disabled)
+    List<int> _tempList = [];
+    for (var element in newSheetLineRows) {
+      _tempList.add(element.beginRow);
+    }
+    Image markedImage = markRows(image, _tempList, [0, 180, 0]);
+    _tempList = [];
+    for (var element in newSheetLineRows) {
+      _tempList.add(element.endRow);
+    }
+    markedImage = markRows(markedImage, _tempList, [255, 0, 0]);
+
+    File markedPicture = File("marked\\M$songID.jpg");
+    markedPicture.createSync(recursive: true);
+    markedPicture.writeAsBytesSync(encodeJpg(markedImage));
+
+    errorCheck(songID, image.height, _tempList);
 
     int i = 1;
 
@@ -61,12 +84,6 @@ void main(List<String> arguments) async {
       i++;
     }
 */
-/*
-    File markedPicture = File("marked\\M$songID.jpg");
-    markedPicture.createSync(recursive: true);
-    markedPicture.writeAsBytesSync(encodeJpg(image));
-*/
-    //errorCheck(songID, image.height, newSheetLineRows);
     //break;
   }
 
@@ -125,9 +142,6 @@ Image processSheet(Image original, OutputType outputType) {
 List<Image> getParts(Image original, List<SheetLine> lines, int songID) {
   List<Image> parts = [];
   List<SheetPage> pages = [];
-  int _numberOfLines = 0;
-  int _begin = lines.first.beginRow;
-  int _end;
 
   generatePageOf(int num) {
     pages.add(SheetPage(
@@ -148,6 +162,9 @@ List<Image> getParts(Image original, List<SheetLine> lines, int songID) {
       case 4:
         if (isAspectRatioOfNextLinesOk(2)) {
           generatePageOf(2);
+        } else {
+          generatePageOf(1);
+          hasOneLinePageSongs.add(songID);
         }
         break;
       case 2:
@@ -198,7 +215,8 @@ List<Image> getParts(Image original, List<SheetLine> lines, int songID) {
 }
 
 saveReport() {
-  File reportFile = File("report.log");
+  File reportFile = File(
+      "report_${DateTime.now().toIso8601String().replaceAll(RegExp(r'[<>:"/\\|?*]'), "_")}.log");
   reportFile.createSync(recursive: true);
   List<String> reportLines = [];
 
@@ -206,12 +224,17 @@ saveReport() {
   noLinesErrorSongs.sort();
   notEnoughLinesErrorSongs.sort();
   tooManyLinesErrorSongs.sort();
+  hasOneLinePageSongs.sort();
+  lastPageOneLineSongs.sort();
+
+  hasOneLinePageSongs
+      .removeWhere((element) => lastPageOneLineSongs.contains(element));
 
   reportLines.add("Not enough lines in:");
-  notEnoughLinesErrorSongs.forEach((element) {
+  for (var element in notEnoughLinesErrorSongs) {
     reportLines.add(element.toString() +
         (notEvenLinesErrorSongs.contains(element) ? "+" : ""));
-  });
+  }
   reportLines.add("\nNot even, but enough lines in:");
   notEvenLinesErrorSongs
       .where((element) => !notEnoughLinesErrorSongs.contains(element))
@@ -219,13 +242,21 @@ saveReport() {
     reportLines.add(element.toString());
   });
   reportLines.add("\nNo lines in:");
-  noLinesErrorSongs.forEach((element) {
+  for (var element in noLinesErrorSongs) {
     reportLines.add(element.toString());
-  });
+  }
   reportLines.add("\nToo many lines in:");
-  tooManyLinesErrorSongs.forEach((element) {
+  for (var element in tooManyLinesErrorSongs) {
     reportLines.add(element.toString());
-  });
+  }
+  reportLines.add("\nHas one liner page:");
+  for (var element in hasOneLinePageSongs) {
+    reportLines.add(element.toString());
+  }
+  reportLines.add("\nLast page has only one line:");
+  for (var element in lastPageOneLineSongs) {
+    reportLines.add(element.toString());
+  }
 
   reportFile.writeAsStringSync(reportLines.join("\n"));
 
@@ -235,7 +266,7 @@ saveReport() {
 errorCheck(int songID, int sheetHeight, List<int> sheetLineRows) {
   if (sheetLineRows.isEmpty) {
     noLinesErrorSongs.add(songID);
-    print("No lines!");
+
     return;
   }
 
@@ -244,10 +275,8 @@ errorCheck(int songID, int sheetHeight, List<int> sheetLineRows) {
 
   if (difference > 2) {
     tooManyLinesErrorSongs.add(songID);
-    print("Too much lines!");
   } else if (difference < -2) {
     notEnoughLinesErrorSongs.add(songID);
-    print("Not Enough lines!");
   }
 
   int prevRow = sheetLineRows.first;
@@ -264,7 +293,7 @@ errorCheck(int songID, int sheetHeight, List<int> sheetLineRows) {
   bool unevenLines = false;
   for (var row in sheetLineRows.sublist(1)) {
     //print("row $row, evenity ${(row - prevRow) / avgHeight}");
-    if ((row - prevRow) / avgHeight > 1.8) {
+    if ((row - prevRow) / avgHeight > 1.5) {
       unevenLines = true;
     }
     prevRow = row;
@@ -272,7 +301,7 @@ errorCheck(int songID, int sheetHeight, List<int> sheetLineRows) {
   if (unevenLines) notEvenLinesErrorSongs.add(songID);
 }
 
-List<SheetLine> getSheetLines(List<int> contentRows) {
+List<SheetLine> getSheetLines(List<int> contentRows, int lastRowNum) {
   /*
   0-100px nem kell figyelni
   Sorok: 85-100 képpont
@@ -288,12 +317,14 @@ List<SheetLine> getSheetLines(List<int> contentRows) {
   int prev = contentRows.first - 1;
 
   for (int row in contentRows) {
-    if (row - 1 != prev) {
-      sheetLines.add(SheetLine(_begin, prev));
+    if ((row - 1 != prev) && (row - prev > 10)) {
+      sheetLines.add(SheetLine(_begin, row - 1));
       _begin = row;
     }
     prev = row;
   }
+  //! Add last
+  sheetLines.add(SheetLine(_begin, lastRowNum));
 
   /*
   for (int row in contentRows) {
@@ -310,8 +341,7 @@ List<SheetLine> getSheetLines(List<int> contentRows) {
     prevRow = row;
   }
 */
-  sheetLines
-      .removeWhere((element) => element.length < 75 || element.length > 125);
+  sheetLines.removeWhere((element) => element.length < 95);
 
   /*print("GROUPS\n\n");
 
@@ -323,6 +353,7 @@ List<SheetLine> getSheetLines(List<int> contentRows) {
   return sheetLines;
 }
 
+///replaceWithRgb is a `length: 3` `List<int>`, with R, G, B values
 Image markRows(Image original, List<int> rows, List<int> replaceWithRGB) {
   assert(replaceWithRGB.length == 3);
 
@@ -355,7 +386,7 @@ List<int> getContentRows(Image image,
   bool emptyRow = true;
   for (var y = 0; y < image.height; y++) {
     emptyRow = true;
-    for (var x = 0; x < (fullWidth ? image.width : 34); x++) {
+    for (var x = 0; x < (fullWidth ? image.width : 35); x++) {
       if (image.getPixel(x, y) < darkCutoff) emptyRow = false;
     }
     if (!(emptyRow ^ reversed)) contentRows.add(y);
