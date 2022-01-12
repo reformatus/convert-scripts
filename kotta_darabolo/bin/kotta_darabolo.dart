@@ -12,6 +12,9 @@ List<int> tooManyLinesErrorSongs = [];
 List<int> noLinesErrorSongs = [];
 List<int> notEvenLinesErrorSongs = [];
 
+List<int> lastPageOneLineSongs = [];
+List<int> hasOneLinePageSongs = [];
+
 void main(List<String> arguments) async {
   for (var sheetEntity in sheetsDir.listSync().sublist(0, 5)) {
     var sheetFile = sheetEntity as File;
@@ -22,7 +25,7 @@ void main(List<String> arguments) async {
 
     Image image = trimSheet(decodeJpg(sheetFile.readAsBytesSync()));
 
-    List<int> newSheetLineRows = getNewSheetLineRows(getContentRows(image));
+    List<SheetLine> newSheetLineRows = getSheetLines(getContentRows(image));
 
     //image =
     //    markRows(image, getContentRows(image, reversed: true), [150, 150, 150]);
@@ -31,7 +34,7 @@ void main(List<String> arguments) async {
 
     int i = 1;
 
-    for (Image part in getParts(image, newSheetLineRows)) {
+    for (Image part in getParts(image, newSheetLineRows, songID)) {
       File partFile = File("parts_white\\P$songID-$i.jpg");
       partFile.createSync(recursive: true);
       partFile.writeAsBytesSync(
@@ -119,81 +122,75 @@ Image processSheet(Image original, OutputType outputType) {
   return Image.fromBytes(original.width, original.height, processedBytes);
 }
 
-List<Image> getParts(Image original, List<int> sheetLineRows) {
+List<Image> getParts(Image original, List<SheetLine> lines, int songID) {
   List<Image> parts = [];
-  List<List<int>> lineRanges = [];
-  List<List<int>> partsLineRanges = [];
+  List<SheetPage> pages = [];
+  int _numberOfLines = 0;
+  int _begin = lines.first.beginRow;
+  int _end;
 
-  for (int beginRow in sheetLineRows) {
-    int length = ((sheetLineRows.indexOf(beginRow) == sheetLineRows.length - 1)
-            ? original.height
-            : (sheetLineRows[(sheetLineRows.indexOf(beginRow) + 1)])) -
-        beginRow;
-
-    lineRanges.add(List<int>.generate(length, (index) => beginRow + index - 4));
+  generatePageOf(int num) {
+    pages.add(SheetPage(
+        lines.first.beginRow, lines[num - 1].endRow, original.width, num));
+    lines.removeRange(0, num);
   }
 
-  List<int> _tempRowsInPart = [];
-
-  addLines(int amount) {
-    //print("  Adding lines...");
-    for (var i = 0; i < amount; i++) {
-      //print("  Added 1 line ${lineRanges.first.first}");
-      _tempRowsInPart.addAll(lineRanges.first);
-      lineRanges.removeAt(0);
-    }
-    partsLineRanges.add(_tempRowsInPart);
-    _tempRowsInPart = [];
+  bool isAspectRatioOfNextLinesOk(int num) {
+    return (original.width / (lines[num - 1].endRow - lines[0].beginRow) >
+        minAspectRatio);
   }
 
-  //! Add first line
-  _tempRowsInPart.addAll(lineRanges.first);
-  lineRanges.removeAt(0);
+  while (lines.isNotEmpty) {
+    //! Adds 3 lines, except when 4 lines left (adds 2)
+    //! Adds rest of the lines when less than 3 left
 
-  while (lineRanges.isNotEmpty) {
-    //! If adding the next line will fit in aspect ratio target
-    while (original.width / (_tempRowsInPart.length + lineRanges.first.length) >
-        minAspectRatio) {
-      _tempRowsInPart.addAll(lineRanges.first);
-      lineRanges.removeAt(0);
-
-      if (lineRanges.isEmpty) break;
-    }
-
-    partsLineRanges.add(_tempRowsInPart);
-    _tempRowsInPart = [];
-    /*
-    switch (lineRanges.length) {
+    switch (lines.length) {
       case 4:
-        //print("Splitting last 4 lines.");
-        addLines(2);
-        addLines(2);
+        if (isAspectRatioOfNextLinesOk(2)) {
+          generatePageOf(2);
+        }
         break;
       case 2:
-        //print("Adding last two lines.");
-        addLines(2);
+        if (isAspectRatioOfNextLinesOk(2)) {
+          generatePageOf(2);
+        } else {
+          generatePageOf(1);
+          hasOneLinePageSongs.add(songID);
+        }
         break;
-      default:
-        //print("Adding 3 lines.");
-        addLines(3);
+      case 1:
+        generatePageOf(1);
+        hasOneLinePageSongs.add(songID);
+        lastPageOneLineSongs.add(songID);
         break;
-    }
-  }*/
 
+      //! lines.length is 3; or >=5
+      default:
+        if (isAspectRatioOfNextLinesOk(3)) {
+          generatePageOf(3);
+        } else if (isAspectRatioOfNextLinesOk(2)) {
+          generatePageOf(2);
+        } else {
+          generatePageOf(1);
+          hasOneLinePageSongs.add(songID);
+        }
+    }
   }
 
-  for (List<int> lineRange in partsLineRanges) {
+  for (SheetPage page in pages) {
     try {
       parts.add(Image.fromBytes(
           original.width,
-          lineRange.length,
+          page.rowCount,
           original.getBytes(format: Format.rgb).sublist(
-              lineRange.first * original.width * 3,
-              lineRange.last * original.width * 3 + original.width * 3),
+              page.beginRow * original.width * 3,
+              page.endRow * original.width * 3),
           format: Format.rgb));
     } catch (e) {
-      print("Error when adding part for song!\n$e");
+      print(
+          "Error when adding part for song! Adding full song and returning.\n$e");
       parts.add(original);
+      return parts;
     }
   }
 
@@ -275,7 +272,7 @@ errorCheck(int songID, int sheetHeight, List<int> sheetLineRows) {
   if (unevenLines) notEvenLinesErrorSongs.add(songID);
 }
 
-List<int> getNewSheetLineRows(List<int> contentRows) {
+List<SheetLine> getSheetLines(List<int> contentRows) {
   /*
   0-100px nem kell figyelni
   Sorok: 85-100 képpont
@@ -284,29 +281,37 @@ List<int> getNewSheetLineRows(List<int> contentRows) {
   Végig területeken: Ami több, mint 85 képpont, sor rögzítése (első elemnél eggyel alacsonyabb szám)
   */
 
-  List<int> newSheetLineRows = [];
+  List<SheetLine> sheetLines = [];
 
-  List<List<int>> rowGroups = [];
+  int _begin = contentRows.first;
 
-  List<int> _tempRowGroup = [];
-  int prevRow = -1;
+  int prev = contentRows.first - 1;
+
   for (int row in contentRows) {
+    if (row - 1 != prev) {
+      sheetLines.add(SheetLine(_begin, prev));
+      _begin = row;
+    }
+    prev = row;
+  }
+
+  /*
+  for (int row in contentRows) {
+    _tempFirstRow ??= row;
+    _tempLastRow = row;
+
     if ((row - 1) > prevRow ||
         contentRows.indexOf(row) == contentRows.length - 1) {
-      if (_tempRowGroup.length > 3) rowGroups.add(_tempRowGroup);
-      _tempRowGroup = [];
+      if (_tempLastRow - _tempFirstRow > 3)
+        sheetLines.add(SheetLine(_tempFirstRow, _tempLastRow - 1));
+      _tempFirstRow = null;
     }
-
-    _tempRowGroup.add(row);
 
     prevRow = row;
   }
-
-  rowGroups
-      .where((element) => element.length > 75 && element.length < 125)
-      .forEach((element) {
-    newSheetLineRows.add(element.first);
-  });
+*/
+  sheetLines
+      .removeWhere((element) => element.length < 75 || element.length > 125);
 
   /*print("GROUPS\n\n");
 
@@ -315,7 +320,7 @@ List<int> getNewSheetLineRows(List<int> contentRows) {
         "length: ${element.length}, first: ${element.first}, last: ${element.last}");
   });*/
 
-  return newSheetLineRows;
+  return sheetLines;
 }
 
 Image markRows(Image original, List<int> rows, List<int> replaceWithRGB) {
@@ -367,4 +372,23 @@ class Sheet {
   Image image;
 
   Sheet(this.sheetFile, this.songID, this.image);
+}
+
+class SheetLine {
+  int beginRow;
+  int endRow;
+  int get length => endRow - beginRow;
+
+  SheetLine(this.beginRow, this.endRow);
+}
+
+class SheetPage {
+  int beginRow;
+  int endRow;
+  int? numberOfLines;
+  int width;
+  double get aspectRatio => width / (endRow - beginRow);
+  int get rowCount => endRow - beginRow;
+
+  SheetPage(this.beginRow, this.endRow, this.width, this.numberOfLines);
 }
