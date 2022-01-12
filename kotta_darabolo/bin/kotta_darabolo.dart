@@ -21,7 +21,7 @@ void main(List<String> arguments) async {
       int.parse(basenameWithoutExtension(a.path).substring(1))
           .compareTo(int.parse(basenameWithoutExtension(b.path).substring(1))));
 
-  for (File sheetFile in sheetFiles.sublist(0, 5)) {
+  for (File sheetFile in sheetFiles.sublist(0)) {
     print(basenameWithoutExtension(sheetFile.path));
 
     int songID =
