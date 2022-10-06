@@ -169,7 +169,11 @@ List<Score> getScores(File songFile) {
     sum += line.length;
   }
   double avgLineLength = sum / lines.length;
-  scores.add(Score("linesLength", (15 - (30 - avgLineLength.round()).abs())));
+  try {
+    scores.add(Score("linesLength", (15 - (30 - avgLineLength.round()).abs())));
+  } catch (e) {
+    print(e);
+  }
 
   //Max char limit per page (if more, -50 points)
   List<String> slides = lyrics.split(new RegExp(r"([\[|])"));
@@ -217,20 +221,26 @@ List<Score> getScores(File songFile) {
 
 String getLyrics(File songFile) {
   String lyrics = songFile.readAsStringSync();
-  //try {
+  try {
     return lyrics.substring(
         lyrics.indexOf("<lyrics>") + 8, lyrics.indexOf("</lyrics>"));
-  /*} catch (e) {
+  } catch (e) {
     print(e.toString());
-    songFile.delete();
-    main();
-  }*/
+    //songFile.delete();
+    //main();
+    return "";
+  }
 }
 
 String getPresentOrder(File songFile) {
   String presentOrder = songFile.readAsStringSync();
-  return presentOrder.substring(presentOrder.indexOf("<presentation>") + 14,
-      presentOrder.indexOf("</presentation>"));
+  try {
+    return presentOrder.substring(presentOrder.indexOf("<presentation>") + 14,
+        presentOrder.indexOf("</presentation>"));
+  } catch (e) {
+    print(e);
+    return "";
+  }
 }
 
 class SimilarElement {
