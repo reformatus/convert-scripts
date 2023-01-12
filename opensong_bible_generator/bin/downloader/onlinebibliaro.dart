@@ -49,8 +49,6 @@ Future<List<Book>> getBooksFor(int translationId) async {
     }
 
     books.add(Book(bookElement.text, chapters: chapters));
-
-    if (books.length == 2) break; // TODO removeme
   }
 
   return books;
