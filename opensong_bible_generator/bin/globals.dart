@@ -1,6 +1,6 @@
 class Verse {
   String text;
-  int num;
+  String num;
 
   Verse(this.num, this.text);
 }

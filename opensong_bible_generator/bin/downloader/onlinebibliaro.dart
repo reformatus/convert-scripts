@@ -42,7 +42,7 @@ Future<List<Book>> getBooksFor(int translationId) async {
           .querySelectorAll("a.vers")
           .asMap()
           .entries
-          .map((e) => Verse(e.key + 1, e.value.text))
+          .map((e) => Verse((e.key + 1).toString(), e.value.text))
           .toList();
 
       chapters.add(Chapter(int.parse(chapterElement.text), verses));

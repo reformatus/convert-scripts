@@ -6,7 +6,7 @@ import 'downloader/biblegateway.dart' as biblegateway;
 
 import 'package:xml/xml.dart' as xml;
 
-File revidealtKaroliFile = File('Egyszerű fordítás');
+File bibleFile = File('Egyszerű fordítás');
 
 void main(List<String> arguments) async {
   //var books = await onlinebibliaro.getBooksFor(4); // Revideált károli
@@ -31,7 +31,7 @@ void main(List<String> arguments) async {
     }
   });
 
-  revidealtKaroliFile.createSync();
-  revidealtKaroliFile
+  bibleFile.createSync();
+  bibleFile
       .writeAsStringSync(builder.buildDocument().toXmlString(pretty: true));
 }

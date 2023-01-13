@@ -30,7 +30,7 @@ Future<List<Verse>> getAllVerses(
   List<Verse> verses = [];
   int i = 1;
   for (var verseMap in jsonResponse["valasz"]["versek"]) {
-    verses.add(Verse(i, verseMap["szoveg"]));
+    verses.add(Verse(i.toString(), verseMap["szoveg"]));
     i++;
   }
 

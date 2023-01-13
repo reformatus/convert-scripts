@@ -10,6 +10,8 @@ const baseUrl = "https://www.biblegateway.com/";
 
 Throttler throttler = Throttler();
 
+List<String> errors = [];
+
 Future<List<Book>> getBooksFor(String translation) async {
   var bibleDoc = parse((await http.get(
     Uri.parse("$baseUrl/versions/$translation/#booklist"),
@@ -31,8 +33,7 @@ Future<List<Book>> getBooksFor(String translation) async {
     print("Scraping: $bookName");
 
     List<Chapter> chapters = [];
-    for (var chapterElement
-        in bookElement.querySelectorAll(".chapters a")) {
+    for (var chapterElement in bookElement.querySelectorAll(".chapters a")) {
       print("  ${chapterElement.text}");
 
       await throttler.throttle();
@@ -49,9 +50,18 @@ Future<List<Book>> getBooksFor(String translation) async {
         elementsOfVerse.add(verse);
 
         if (i + 1 >= verseElements.length ||
-            RegExp(r'^\d+\u00A0').hasMatch(verseElements[i + 1].text)) {
+            RegExp(r'^\d+[\u00A0\-]').hasMatch(verseElements[i + 1].text)) {
+          String? verseNum =
+              elementsOfVerse.first.querySelector('.versenum')?.text.trim();
+          if (verseNum == null) {
+            verseNum = (verses.length + 1).toString();
+            if (verses.isNotEmpty) {
+              errors.add(
+                  "Verse didn't have number class, added index instead: $bookName ${chapterElement.text},$verseNum");
+            }
+          }
           verses.add(Verse(
-              verses.length + 1,
+              verseNum,
               elementsOfVerse
                   .map((e) =>
                       e.nodes.whereType<Text>().map((e) => e.text).join())
@@ -64,6 +74,8 @@ Future<List<Book>> getBooksFor(String translation) async {
     }
     books.add(Book(bookName, chapters: chapters));
   }
+
+  print("Finished with errors: " + errors.join('\n'));
 
   return books;
 }
