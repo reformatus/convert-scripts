@@ -1,14 +1,17 @@
 import 'dart:io';
 
-import 'downloader/onlinebibliaro.dart' as onlinebibliaro;
 //import 'downloader/szentirashu.dart' as szentirashu;
+//import 'downloader/onlinebibliaro.dart' as onlinebibliaro;
+import 'downloader/biblegateway.dart' as biblegateway;
 
 import 'package:xml/xml.dart' as xml;
 
-File revidealtKaroliFile = File('Revideált Károli');
+File revidealtKaroliFile = File('Egyszerű fordítás');
 
 void main(List<String> arguments) async {
-  var books = await onlinebibliaro.getBooksFor(4); //Revideált károli
+  //var books = await onlinebibliaro.getBooksFor(4); // Revideált károli
+  var books = await biblegateway
+      .getBooksFor("Hungarian-Bible-Easy-to-Read-Version-ERV-HU"); // EFO
 
   var builder = xml.XmlBuilder();
   builder.declaration(encoding: 'UTF-8');
